@@ -6,5 +6,6 @@ Teensyduino is the arduino plugin to enable programming Teensy development board
 4. Programming the Teensy can be a bit finicky. The software will direct you on what to do. If the device fails to enter programming mode the software is probably not correctly installed
 
 # Huzzah 32
+Huzzah 32 Boards just required the adddtion of a board manager. 
 1. Download and install drivers [https://www.silabs.com/products/development-tools/software/usb-to-uart-bridge-vcp-drivers](https://www.silabs.com/products/development-tools/software/usb-to-uart-bridge-vcp-drivers)
 2. Open arduino IDE preferences, and add the following to the "Additional Board Managers URLs" https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
