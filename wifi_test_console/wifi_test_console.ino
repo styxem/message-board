@@ -4,9 +4,11 @@
 String commandBuffer = "";
 String SSID;
 String PASS;
+String HOST;
+String PORT;
 
-int SSID_ADDR = 0;
-int PASS_ADDR = 31;
+const int SSID_ADDR = 0;
+const int PASS_ADDR = 31;
 
 void setup() {
 
@@ -41,8 +43,12 @@ void handelSerial() {
     char tmp = Serial.read();
     Serial.print(tmp);
     if (tmp == 127) {
-      Serial.write(12);
       commandBuffer.remove(commandBuffer.length() - 1, 1);
+      // I couldn't easily find the escape sequence to delete a character
+      Serial.write(27);
+      Serial.print("[1D");
+      Serial.write(27);
+      Serial.print("[K");
     } else if (tmp != 13) {
       commandBuffer += tmp;
     } else {
@@ -58,14 +64,20 @@ void handelSerial() {
         listHelp();
       } else if (commandBuffer == "show") {
         showVars();
-      } else if (commandBuffer == "conn") {
+      } else if (commandBuffer == "connect") {
         networkConnect();
-      } else if (commandBuffer.indexOf("setp") >= 0) {
-        eepromWrite(PASS_ADDR, commandBuffer.substring(5));
+      } else if (commandBuffer.indexOf("sethost") >= 0) {
+        HOST = commandBuffer.substring(8);
+      } else if (commandBuffer.indexOf("setport") >= 0) {
+        PORT = commandBuffer.substring(8);
+      } else if (commandBuffer.indexOf("setpass") >= 0) {
+        eepromWrite(PASS_ADDR, commandBuffer.substring(8));
         PASS = eepromRead(PASS_ADDR);
-      } else if (commandBuffer.indexOf("sets") >= 0) {
-        eepromWrite(SSID_ADDR, commandBuffer.substring(5));
+      } else if (commandBuffer.indexOf("setssid") >= 0) {
+        eepromWrite(SSID_ADDR, commandBuffer.substring(8));
         SSID = eepromRead(SSID_ADDR);
+      } else if (commandBuffer.indexOf("get") >= 0) {
+        Serial.println(networkGet(commandBuffer.substring(4)));
       } else {
         Serial.println("Invalid Command");
       }
@@ -77,12 +89,15 @@ void handelSerial() {
 
 void listHelp() {
   Serial.println("Available Commands:");
-  Serial.println("\tscan   List available networks");
-  Serial.println("\thelp   Show this list");
-  Serial.println("\tsets   Set SSID");
-  Serial.println("\tsetp   Set Password");
-  Serial.println("\tshow   Show SSID and Password");
-  Serial.println("\tconn   Connect to set nework using set password");
+  Serial.println("\tscan      List available networks");
+  Serial.println("\thelp      Show this list");
+  Serial.println("\tsetssid   Set SSID");
+  Serial.println("\tsetpass   Set Password");
+  Serial.println("\tsethost   Set host to connect to");
+  Serial.println("\tsetport   Set port to connect to");
+  Serial.println("\tshow      Show set variables");
+  Serial.println("\tconnect   Connect to set nework using set password");
+  Serial.println("\tget       Send get request to URL");
 }
 
 void listNetworks() {
@@ -107,14 +122,39 @@ void listNetworks() {
   }
 }
 
+String networkGet(String url) {
+  WiFiClient client;
+  char host_char[HOST.length()+1];
+  HOST.toCharArray(host_char, HOST.length()+1);
+  Serial.println(host_char);
+  
+  Serial.println("Connecting To " + HOST + url);
+  client.connect("www.google.com", 80);
+  client.println("GET " + url);
+  client.println("Host: " + HOST);
+  client.println("Connection: close");
+  client.println();
+
+  Serial.println("");
+  while (client.available()) {
+    Serial.write(client.read());
+  }
+  Serial.println("\n\rDisconnecting from " + HOST);
+  client.stop();
+}
+
 void networkConnect() {
-  char s[32], p[32];
-  SSID.toCharArray(s, 32);
-  PASS.toCharArray(p, 32);
-  WiFi.begin(s, p);
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.println("Attempting To Connect...");
-    delay(500);
+  if (WiFi.status() != WL_CONNECTED) {
+    char s[32], p[32];
+    SSID.toCharArray(s, 32);
+    PASS.toCharArray(p, 32);
+    WiFi.begin(s, p);
+    Serial.print("Connecting to " + SSID);
+    while (WiFi.status() != WL_CONNECTED) {
+      Serial.print('.');
+      delay(500);
+    }
+    Serial.print("\n\r");
   }
   Serial.print("IP: ");
   Serial.println(WiFi.localIP());
@@ -122,8 +162,10 @@ void networkConnect() {
 
 void showVars() {
   Serial.println("Showing Variables:");
-  Serial.println("\tSSID   " + String(SSID));
-  Serial.println("\tPASS   " + String(PASS));
+  Serial.println("\tSSID   " + SSID);
+  Serial.println("\tPASS   " + PASS);
+  Serial.println("\tHOST   " + HOST);
+  Serial.println("\tPORT   " + PORT);
 }
 
 void eepromWrite(int addr, String str) {
