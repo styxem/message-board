@@ -1,14 +1,17 @@
-#include <WiFiClientSecure.h>
+#include <WiFi.h>
 #include <EEPROM.h>
-
+#include <WiFiClientSecure.h>
+#include <WiFiClient.h>
 String commandBuffer = "";
 String SSID;
 String PASS;
-String HOST = "www.howsmyssl.com";
-String PORT = "443";
+String HOST;
+String PORT;
 
 const int SSID_ADDR = 0;
 const int PASS_ADDR = 31;
+const int HOST_ADDR = 63;
+const int PORT_ADDR = 95;
 
 const char* test_root_ca= \
      "-----BEGIN CERTIFICATE-----\n" \
@@ -51,15 +54,17 @@ String eepromRead(int addr) {
 
 void listHelp() {
   Serial.println("Available Commands:");
-  Serial.println("\tscan      List available networks");
-  Serial.println("\thelp      Show this list");
-  Serial.println("\tsetssid   Set SSID");
-  Serial.println("\tsetpass   Set Password");
-  Serial.println("\tsethost   Set host to connect to");
-  Serial.println("\tsetport   Set port to connect to");
-  Serial.println("\tshow      Show set variables");
-  Serial.println("\tconnect   Connect to set nework using set password");
-  Serial.println("\tget       Send get request to URL");
+  Serial.println("\tscan       List available networks");
+  Serial.println("\thelp       Show this list");
+  Serial.println("\tsetssid    Set SSID");
+  Serial.println("\tsetpass    Set Password");
+  Serial.println("\tsethost    Set host to connect to");
+  Serial.println("\tsetport    Set port to connect to");
+  Serial.println("\tshow       Show set variables");
+  Serial.println("\tstart      Start WiFi");
+  Serial.println("\tconnect    Connect to set host");
+  Serial.println("\tdisconnect Disconnect from host");
+  Serial.println("\ts          Send string to host");
 }
 
 void listNetworks() {
@@ -84,27 +89,53 @@ void listNetworks() {
   }
 }
 void networkGet(String url) {
-  client.setCACert(test_root_ca);
+  //client.setCACert(test_root_ca);
   char host_char[HOST.length()+1];
   HOST.toCharArray(host_char, HOST.length()+1);
   Serial.println(host_char);
   
-  Serial.println("Connecting To " + HOST + " @ " + url);
+  Serial.println("Connecting To " + String(host_char) + " @ " + url);
   if(!client.connect(host_char, PORT.toInt())) {
     Serial.println("Connection Failed");
   } else {
-    client.println("GET " + url + " HTTP/1.0");
+    client.println("GET " + url);
     client.println("Host: " + HOST);
-    client.println("Connection: close");
+    //client.println("Connection: close");
     client.println();
 
     Serial.println("");
+    if (!client.available()) {
+      Serial.println("No Data");
+    }
     while (client.available()) {
       Serial.write(client.read());
     }
     Serial.println("\n\rDisconnecting from " + HOST);
   }
     client.stop();
+}
+
+void telnetConnect() {
+  char host_char[HOST.length()+1];
+  HOST.toCharArray(host_char, HOST.length()+1);
+  Serial.println("Connecting To " + String(host_char) + ":" + PORT);
+  if(client.connect(host_char, PORT.toInt())) {
+    Serial.println("Connected");
+  } else {
+    Serial.println("Connection Failed");
+  }
+}
+
+void telnetDisconnect() {
+  Serial.println("Disconnecting From " + HOST);
+  client.stop();
+}
+
+void telnetSend(String tmp) {
+  client.println(tmp);
+  while (client.available()) {
+    Serial.write(client.read());
+  }
 }
 
 void networkConnect() {
@@ -168,20 +199,26 @@ void handelSerial() {
         listHelp();
       } else if (commandBuffer == "show") {
         showVars();
-      } else if (commandBuffer == "connect") {
+      } else if (commandBuffer == "start") {
         networkConnect();
+      } else if (commandBuffer == "connect") {
+        telnetConnect();
+      } else if (commandBuffer == "disconnect") {
+        telnetDisconnect();
       } else if (commandBuffer.indexOf("sethost") >= 0) {
-        HOST = commandBuffer.substring(8);
+        eepromWrite(HOST_ADDR, commandBuffer.substring(8));
+        HOST = eepromRead(HOST_ADDR);
       } else if (commandBuffer.indexOf("setport") >= 0) {
-        PORT = commandBuffer.substring(8);
+        eepromWrite(PORT_ADDR, commandBuffer.substring(8));
+        PORT = eepromRead(PORT_ADDR);
       } else if (commandBuffer.indexOf("setpass") >= 0) {
         eepromWrite(PASS_ADDR, commandBuffer.substring(8));
         PASS = eepromRead(PASS_ADDR);
       } else if (commandBuffer.indexOf("setssid") >= 0) {
         eepromWrite(SSID_ADDR, commandBuffer.substring(8));
         SSID = eepromRead(SSID_ADDR);
-      } else if (commandBuffer.indexOf("get") >= 0) {
-        networkGet(commandBuffer.substring(4));
+      } else if (commandBuffer.indexOf("s") >= 0) {
+        telnetSend(commandBuffer.substring(2));
       } else {
         Serial.println("Invalid Command");
       }
@@ -209,6 +246,8 @@ void setup() {
   // Load SSID and PASS from EEPROM
   SSID = eepromRead(SSID_ADDR);
   PASS = eepromRead(PASS_ADDR); // This max length is just a guess
+  HOST = eepromRead(HOST_ADDR);
+  PORT = eepromRead(PORT_ADDR);
 
   listHelp();
   Serial.print("\n>");
@@ -216,4 +255,21 @@ void setup() {
 
 void loop() {
   handelSerial();
+
+  // Write data to serial as soon as we get something
+  String tmp;
+  char c;
+  while (client.available()) {
+    c = client.read();
+    tmp += c;
+  }
+  if (tmp.length() > 0) {
+    Serial.write(27);
+    Serial.print("[0D");
+    Serial.write(27);
+    Serial.print("[K");
+    Serial.println(tmp);
+    tmp = "";
+    Serial.print(">");
+  }
 }
