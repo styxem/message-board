@@ -1,0 +1,208 @@
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <WiFiClientSecure.h>
+
+// Constants for connecting to Network and Google
+#define SSID "WIFIE33AE7"
+#define PASS "LYR6J71MLNGRDAWH"
+#define HOST "imap.gmail.com"
+#define PORT 993
+
+// Misc Constants (Magic Numbers should be avoided)
+#define DEBUG true
+
+// Object that will do the connecting
+WiFiClientSecure client;
+
+// Confiure WiFi connection and connect to network
+// This function blocks until a connection has been established
+void network_connect() {
+  if (WiFi.status() != WL_CONNECTED) {
+
+    //Attempt to Connect
+    WiFi.begin(SSID, PASS);
+    if (DEBUG) {
+      Serial.print("Connecting to: ");
+      Serial.print(SSID);
+      Serial.print(" ");
+    }
+
+    while (WiFi.status() != WL_CONNECTED) {
+      if (DEBUG)
+	      Serial.print('.');
+      delay(500);
+    }
+
+    if (DEBUG) {
+      Serial.print("\n\r");
+      Serial.print("IP: ");
+      Serial.println(WiFi.localIP());
+    }
+  }
+}
+
+// Establish a telnet-like connection to remote server using WiFiClientSecure
+// Non-Blocking
+void telnet_connect() {
+
+  if (DEBUG)  {
+    Serial.print("Connecting to: ");
+    Serial.print(HOST);
+    Serial.print(" @ ");
+    Serial.println(PORT);
+  }
+
+  bool status = client.connect(HOST, PORT);
+
+  if (DEBUG) {
+    if (status)
+      Serial.println("Connection Successfull\n");
+    else
+      Serial.println("Connection Failed\n");
+  }
+
+}
+
+// Close connection to remote host
+// Non-Blocking
+void telnet_close() {
+  client.stop();
+}
+
+// Send data to remote host
+// Returns responce from remote host
+// Non-Blocking(?)
+String telnet_send(String data) {
+  if (DEBUG)
+    Serial.println("Sending data to remote host:\n\t" + data + "\n");
+
+  client.println(data);
+  
+
+  // Grab data and keep waiting if more is comming in
+  String resp;
+  int len = 0;
+  do {
+    len = resp.length();
+    delay(250);
+    while (client.available()) {
+      resp += (char)client.read();
+    }
+  } while(len != resp.length());
+
+  if (DEBUG) {
+    Serial.println("Host Reponse: [" + String(resp.length()) + "]");
+    Serial.println("================================================");
+    Serial.print(resp);
+    Serial.println("================================================\n");
+  }
+
+  return resp;
+}
+
+// Initialise imap code
+void initialise_imap() {
+  network_connect();
+  telnet_connect();
+}
+
+// This function here has taught me why so many people hate c/c++
+void parse_message_list(int*& message_list, int& message_list_length, String resp) {
+  int line_start = resp.indexOf("* SEARCH");
+  String sub_str = resp.substring(line_start + 9, resp.indexOf("\n", line_start));
+
+  if (sub_str.length() > 0) {
+    message_list_length = 1;
+
+    // Find how many numbers were returned
+    for(int i = 0; i < sub_str.length(); i++) {
+      if (sub_str.charAt(i) == ' ')
+        message_list_length++;
+    }
+  }
+  int *list = new int[message_list_length];
+
+  // Add numbers to the list
+  for(int i = 0; i < message_list_length; i++) {
+    if (i == message_list_length - 1) {
+      list[i] = sub_str.toInt(); 
+    } else {
+      list[i] = sub_str.substring(0, sub_str.indexOf(" ", 1)).toInt();
+    }
+    sub_str = sub_str.substring(sub_str.indexOf(" ", 1));
+  }
+
+  message_list = list;      
+
+  if (DEBUG) {
+    Serial.print("Message List Length: ");
+    Serial.println(message_list_length);
+    Serial.print("Message List: ");
+    for(int i = 0; i < message_list_length; i++) {
+      Serial.print(list[i]);
+      Serial.print(" ");
+    }
+    Serial.println("\n");
+  }
+}
+
+// Check Email
+// Updates list of messages at pointer
+// Updates number of messages in list
+void check_email() {
+  int* message_list;
+  int message_list_length = 0;
+  String messages[message_list_length];
+
+  telnet_send("a1 LOGIN ou.messageboard eecsBobcats");
+  telnet_send("a1 SELECT INBOX");
+  
+  parse_message_list(message_list, message_list_length, telnet_send("a1 SEARCH UNSEEN FROM \"ohio.edu\""));
+  for (int i = 0; i < message_list_length; i++) {
+    // Message order is Subject, Date, Body
+    String message = telnet_send("a1 FETCH " + String(message_list[i]) + " BODY[]");
+    int subject_position = message.indexOf("Subject:");
+    String subject = message.substring(subject_position, message.indexOf("Thread-Topic:") - 1);
+    Serial.println(subject_position);
+    Serial.println(message.indexOf("\n", subject_position));
+    Serial.print(subject);
+    //int date_position = message.indexOf("Date:");
+    //String date = message.substring(date_position, message.indexOf("\n", date_position));
+    //Serial.print(subject);
+
+    // This requires some message traversal
+    //int body_position = message.indexOf("Content-Type: text/plain;");
+    //body_position = message.indexOf("\n", body_position);
+    //body_position = message.indexOf("\n", body_position);
+    //body_position = message.indexOf("\n", body_position);
+    //String body = message.substring(body_position, message.indexOf("\n", body_position));
+    //Serial.print(subject);
+
+    //messages[i] = subject + body + date;
+
+    //if (DEBUG)
+      //Serial.println(messages[i] + "\n");
+  }
+
+  // Array needs to be deleted because it was created with new
+  delete [] message_list;
+
+}
+
+void setup() {
+  Serial.begin(115200);
+  while(!Serial);
+
+  // Clear garbage from terminal                                                                      
+  Serial.write(27);                                                                                   
+  Serial.print("[2J");                                                                                
+  Serial.write(27);                                                                                   
+  Serial.print("[H");
+  
+  initialise_imap();
+
+  check_email();  
+}
+
+void loop() {
+}
