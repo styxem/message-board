@@ -1,0 +1,110 @@
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <WiFiClientSecure.h>
+
+// Constants for connecting to Network and Google
+#define SSID = "WIFI33AE7"
+#define PASS = "LYR6J71MLNGRDAWH"
+#define HOST = "imap.gmail.com"
+#define PORT = "933"
+
+// Misc Constants (Magic Numbers should be avoided)
+#define DEBUG = true
+
+// Object that will do the connecting
+WiFiClientSecure client;
+
+// Confiure WiFi connection and connect to network
+// This function blocks until a connection has been established
+void network_connect() {
+  if (WiFi.status() != WL_CONNECTED) {
+
+    // Char variables to hold SSID and PASS (Wifi lib only accepts c-strings)
+    char s[SSID.length()+1], p[PASS.length()+1];
+    // Assign CStrings
+    SSID.toCharArray(s, SSID.length()+1);
+    PASS.toCharArray(p, PASS.length()+1);
+
+    //Attempt to Connect
+    if (DEBUG)
+      Serial.print("Connecting to: " + SSID);
+
+    while (WiFi.status() != WL_CONNECTED) {
+      if (DEBUG)
+	Serial.print('.');
+      delay(500);
+    }
+
+    if (DEBUG) {
+      Serial.print("\n\r");
+      Serial.print("IP: ");
+      Serial.println(WiFi.localIP());
+    }
+  }
+}
+
+// Establish a telnet-like connection to remote server using WiFiClientSecure
+// Non-Blocking
+void telnet_connect() {
+  
+  // More casting
+  char h[HOST.length()+1];
+  int p = PORT.toIne();
+  HOST.toCharArray(h, HOST.length()+1);
+
+  if (DEBUG)
+    Serial.println("Connecting to: " + HOST + " @ " + PORT);
+
+  bool status = client.connect(h, p);
+
+  if (DEBUG)
+    if (status)
+      Serial.println("Connection Successfull");
+    else
+      Serial.println("Connection Failed");
+
+}
+
+// Close connection to remote host
+// Non-Blocking
+void telnet_close() {
+  client.stop();
+}
+
+// Send data to remote host
+// Returns responce from remote host
+// Non-Blocking(?)
+String telnet_send(String data) {
+  if (DEBUG)
+    Serial.println("Sending data to remote host:\n\t" + data);
+
+  client.println(data);
+
+  String resp;
+  while (client.available()) {
+    resp += client.read();
+  }
+
+  if (DEBUG)
+    Serial.println("Host Reponse:\n\t" + resp);
+
+  return resp;
+}
+
+// Initialise imap code
+void initialise_imap() {
+  network_connect();
+  telnet_connect();
+}
+
+// Check Email
+// Updates list of messages at pointer
+// Updates number of messages in list
+void check_email(String* messages, int message_count) {
+  
+}
+
+// Send Email
+void send_email(String subject, String message) {
+  
+}
